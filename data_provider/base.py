@@ -364,10 +364,11 @@ class DataFetcherManager:
         获取日线数据（自动切换数据源）
         
         故障切换策略：
-        1. 从最高优先级数据源开始尝试
-        2. 捕获异常后自动切换到下一个
-        3. 记录每个数据源的失败原因
-        4. 所有数据源失败后抛出详细异常
+        1. 美股/韩股：直接使用 YfinanceFetcher
+        2. 其他股票：从最高优先级数据源开始尝试
+        3. 捕获异常后自动切换到下一个
+        4. 记录每个数据源的失败原因
+        5. 所有数据源失败后抛出详细异常
         
         Args:
             stock_code: 股票代码
@@ -381,6 +382,30 @@ class DataFetcherManager:
         Raises:
             DataFetchError: 所有数据源都失败时抛出
         """
+        # 美股/韩股：直接使用 YfinanceFetcher
+        if _is_us_code(stock_code) or _is_kr_code(stock_code):
+            market_type = "韩股" if _is_kr_code(stock_code) else "美股"
+            logger.info(f"检测到{market_type}代码 {stock_code}，使用 YfinanceFetcher")
+            yfinance_fetcher = next(
+                (f for f in self._fetchers if f.name == "YfinanceFetcher"), None
+            )
+            if yfinance_fetcher:
+                try:
+                    df = yfinance_fetcher.get_daily_data(
+                        stock_code=stock_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        days=days
+                    )
+                    if df is not None and not df.empty:
+                        logger.info(f"[YfinanceFetcher] 成功获取{market_type} {stock_code}")
+                        return df, yfinance_fetcher.name
+                except Exception as e:
+                    error_msg = f"[YfinanceFetcher] 获取{market_type} {stock_code} 失败: {e}"
+                    logger.error(error_msg)
+                    raise DataFetchError(error_msg)
+            raise DataFetchError(f"YfinanceFetcher 不可用，无法获取{market_type}数据")
+        
         errors = []
         
         for fetcher in self._fetchers:
