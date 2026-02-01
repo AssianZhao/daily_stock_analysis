@@ -382,6 +382,14 @@ class DataFetcherManager:
         Raises:
             DataFetchError: 所有数据源都失败时抛出
         """
+        # 导入美股代码判断函数
+        from .akshare_fetcher import _is_us_code
+        
+        # 定义韩国股票代码判断函数
+        def _is_kr_code(code: str) -> bool:
+            import re
+            return bool(re.match(r'^(KS|KQ)\d{6}$', code.strip().upper()))
+        
         # 美股/韩股：直接使用 YfinanceFetcher
         if _is_us_code(stock_code) or _is_kr_code(stock_code):
             market_type = "韩股" if _is_kr_code(stock_code) else "美股"
