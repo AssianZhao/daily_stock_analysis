@@ -69,9 +69,11 @@ class YfinanceFetcher(BaseFetcher):
         - A股深市：000001.SZ (Shenzhen Stock Exchange)
         - 港股：0700.HK (Hong Kong Stock Exchange)
         - 美股：AAPL, TSLA, GOOGL (无需后缀)
+        - 韩国KOSPI：005930.KS (Korea Stock Exchange)
+        - 韩国KOSDAQ：035420.KQ (KOSDAQ)
 
         Args:
-            stock_code: 原始代码，如 '600519', 'hk00700', 'AAPL'
+            stock_code: 原始代码，如 '600519', 'hk00700', 'AAPL', 'KS005930', 'KQ035420'
 
         Returns:
             Yahoo Finance 格式代码
@@ -83,6 +85,10 @@ class YfinanceFetcher(BaseFetcher):
             '0700.HK'
             >>> fetcher._convert_stock_code('AAPL')
             'AAPL'
+            >>> fetcher._convert_stock_code('KS005930')
+            '005930.KS'
+            >>> fetcher._convert_stock_code('KQ035420')
+            '035420.KQ'
         """
         import re
 
@@ -100,8 +106,20 @@ class YfinanceFetcher(BaseFetcher):
             logger.debug(f"转换港股代码: {stock_code} -> {hk_code}.HK")
             return f"{hk_code}.HK"
 
+        # 韩国KOSPI：KS前缀 -> .KS后缀
+        if code.startswith('KS') and len(code) == 8:
+            kr_code = code[2:]  # 取后6位数字
+            logger.debug(f"转换韩国KOSPI代码: {stock_code} -> {kr_code}.KS")
+            return f"{kr_code}.KS"
+
+        # 韩国KOSDAQ：KQ前缀 -> .KQ后缀
+        if code.startswith('KQ') and len(code) == 8:
+            kr_code = code[2:]  # 取后6位数字
+            logger.debug(f"转换韩国KOSDAQ代码: {stock_code} -> {kr_code}.KQ")
+            return f"{kr_code}.KQ"
+
         # 已经包含后缀的情况
-        if '.SS' in code or '.SZ' in code or '.HK' in code:
+        if '.SS' in code or '.SZ' in code or '.HK' in code or '.KS' in code or '.KQ' in code:
             return code
 
         # 去除可能的 .SH 后缀
@@ -298,28 +316,44 @@ class YfinanceFetcher(BaseFetcher):
         code = stock_code.strip().upper()
         return bool(re.match(r'^[A-Z]{1,5}(\.[A-Z])?$', code))
 
+    def _is_kr_stock(self, stock_code: str) -> bool:
+        """
+        判断代码是否为韩国股票
+        
+        韩国股票代码规则：
+        - KS + 6位数字（KOSPI主板），如 'KS005930'（三星电子）
+        - KQ + 6位数字（KOSDAQ创业板），如 'KQ035420'（NAVER）
+        """
+        code = stock_code.strip().upper()
+        return bool(re.match(r'^(KS|KQ)\d{6}$', code))
+
     def get_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
         """
-        获取美股实时行情数据
+        获取美股/韩股实时行情数据
         
         数据来源：yfinance Ticker.info
         
         Args:
-            stock_code: 美股代码，如 'AMD', 'AAPL', 'TSLA'
+            stock_code: 股票代码，如 'AMD', 'AAPL', 'KS005930', 'KQ035420'
             
         Returns:
             UnifiedRealtimeQuote 对象，获取失败返回 None
         """
         import yfinance as yf
         
-        # 仅处理美股
-        if not self._is_us_stock(stock_code):
-            logger.debug(f"[Yfinance] {stock_code} 不是美股，跳过")
+        # 处理美股和韩国股票
+        is_us = self._is_us_stock(stock_code)
+        is_kr = self._is_kr_stock(stock_code)
+        
+        if not is_us and not is_kr:
+            logger.debug(f"[Yfinance] {stock_code} 不是美股/韩股，跳过")
             return None
         
         try:
-            symbol = stock_code.strip().upper()
-            logger.debug(f"[Yfinance] 获取美股 {symbol} 实时行情")
+            # 转换为 yfinance 格式
+            symbol = self._convert_stock_code(stock_code)
+            market_type = "韩股" if is_kr else "美股"
+            logger.debug(f"[Yfinance] 获取{market_type} {symbol} 实时行情")
             
             ticker = yf.Ticker(symbol)
             
@@ -374,8 +408,11 @@ class YfinanceFetcher(BaseFetcher):
             except Exception:
                 name = symbol
             
+            # 使用原始代码作为返回的 code（保持一致性）
+            original_code = stock_code.strip().upper()
+            
             quote = UnifiedRealtimeQuote(
-                code=symbol,
+                code=original_code,
                 name=name,
                 source=RealtimeSource.FALLBACK,
                 price=price,
@@ -396,11 +433,13 @@ class YfinanceFetcher(BaseFetcher):
                 circ_mv=None,
             )
             
-            logger.info(f"[Yfinance] 获取美股 {symbol} 实时行情成功: 价格={price}")
+            market_type = "韩股" if is_kr else "美股"
+            logger.info(f"[Yfinance] 获取{market_type} {original_code} 实时行情成功: 价格={price}")
             return quote
             
         except Exception as e:
-            logger.warning(f"[Yfinance] 获取美股 {stock_code} 实时行情失败: {e}")
+            market_type = "韩股" if is_kr else "美股"
+            logger.warning(f"[Yfinance] 获取{market_type} {stock_code} 实时行情失败: {e}")
             return None
 
 

@@ -174,15 +174,16 @@ class ApiHandler:
         
         code = code_list[0].strip()
 
-        # 验证股票代码格式：A股(6位数字) / 港股(HK+5位数字) / 美股(1-5个大写字母+.+2个后缀字母)
+        # 验证股票代码格式：A股(6位数字) / 港股(HK+5位数字) / 美股(1-5个大写字母+.+2个后缀字母) / 韩国(KS/KQ+6位数字)
         code = code.upper()
         is_a_stock = re.match(r'^\d{6}$', code)
         is_hk_stock = re.match(r'^HK\d{5}$', code)
         is_us_stock = re.match(r'^[A-Z]{1,5}(\.[A-Z]{1,2})?$', code.upper())
+        is_kr_stock = re.match(r'^(KS|KQ)\d{6}$', code)
 
-        if not (is_a_stock or is_hk_stock or is_us_stock):
+        if not (is_a_stock or is_hk_stock or is_us_stock or is_kr_stock):
             return JsonResponse(
-                {"success": False, "error": f"无效的股票代码格式: {code} (A股6位数字 / 港股HK+5位数字 / 美股1-5个字母)"},
+                {"success": False, "error": f"无效的股票代码格式: {code} (A股6位数字 / 港股HK+5位数字 / 美股1-5个字母 / 韩国KS/KQ+6位数字)"},
                 status=HTTPStatus.BAD_REQUEST
             )
         

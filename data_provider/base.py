@@ -516,20 +516,27 @@ class DataFetcherManager:
             logger.debug(f"[实时行情] 功能已禁用，跳过 {stock_code}")
             return None
         
-        # 美股单独处理，使用 YfinanceFetcher
-        if _is_us_code(stock_code):
+        # 判断是否为韩国股票
+        def _is_kr_code(code: str) -> bool:
+            """判断是否为韩国股票代码（KS/KQ+6位数字）"""
+            import re
+            return bool(re.match(r'^(KS|KQ)\d{6}$', code.strip().upper()))
+        
+        # 美股和韩股单独处理，使用 YfinanceFetcher
+        if _is_us_code(stock_code) or _is_kr_code(stock_code):
+            market_type = "韩股" if _is_kr_code(stock_code) else "美股"
             for fetcher in self._fetchers:
                 if fetcher.name == "YfinanceFetcher":
                     if hasattr(fetcher, 'get_realtime_quote'):
                         try:
                             quote = fetcher.get_realtime_quote(stock_code)
                             if quote is not None:
-                                logger.info(f"[实时行情] 美股 {stock_code} 成功获取 (来源: yfinance)")
+                                logger.info(f"[实时行情] {market_type} {stock_code} 成功获取 (来源: yfinance)")
                                 return quote
                         except Exception as e:
-                            logger.warning(f"[实时行情] 美股 {stock_code} 获取失败: {e}")
+                            logger.warning(f"[实时行情] {market_type} {stock_code} 获取失败: {e}")
                     break
-            logger.warning(f"[实时行情] 美股 {stock_code} 无可用数据源")
+            logger.warning(f"[实时行情] {market_type} {stock_code} 无可用数据源")
             return None
         
         # 获取配置的数据源优先级
